@@ -316,55 +316,53 @@ export default function (schema, opts) {
       .catch(next)
   })
 
-  schema.pre('findOneAndReplace', function(next) {
-    this.model
-      .findOne(this.getQuery())
-      .then((original) => {
-        if (original) this._originalId = original._id
-        original = original || new this.model({})
-        this._original = toJSON(original.data())
+  schema.pre('findOneAndReplace', function (next) {
+    this.model.findOne(this.getQuery()).then((original) => {
+      if (original) this._originalId = original._id
+      original = original || new this.model({})
+      this._original = toJSON(original.data())
 
-        let ops = jsonpatch.compare(
-          original.isNew ? {} : toJSON(this._original) || {},
-          toJSON(new this.model(this.getUpdate()).data())
-        )
+      let ops = jsonpatch.compare(
+        original.isNew ? {} : toJSON(this._original) || {},
+        toJSON(new this.model(this.getUpdate()).data())
+      )
 
-        if (options.excludes.length > 0) {
-          ops = ops.filter((op) => {
-            const pathArray = getArrayFromPath(op.path)
-            return (
-              !options.excludes.some((exclude) =>
-                isPathContained(exclude, pathArray)
-              ) && options.excludes.every((exclude) => deepRemovePath(op, exclude))
-            )
-          })
-        }
-
-        // don't save a patch when there are no changes to save
-        if (!ops.length) {
-          return Promise.resolve()
-        }
-
-        // track original values if enabled
-        if (options.trackOriginalValue) {
-          ops.map((entry) => {
-            const path = tail(entry.path.split('/')).join('.')
-            entry.originalValue = get(
-              original.isNew ? {} : original._original,
-              path
-            )
-          })
-        }
-
-        // assemble patch data
-        const data = { ops, ref: this._originalId }
-        each(options.includes, (type, name) => {
-          data[name] = original[type.from || name]
+      if (options.excludes.length > 0) {
+        ops = ops.filter((op) => {
+          const pathArray = getArrayFromPath(op.path)
+          return (
+            !options.excludes.some((exclude) =>
+              isPathContained(exclude, pathArray)
+            ) &&
+            options.excludes.every((exclude) => deepRemovePath(op, exclude))
+          )
         })
+      }
 
-        return original.patches.create(data)
-          .then(() => next(), next)
+      // don't save a patch when there are no changes to save
+      if (!ops.length) {
+        return Promise.resolve()
+      }
+
+      // track original values if enabled
+      if (options.trackOriginalValue) {
+        ops.map((entry) => {
+          const path = tail(entry.path.split('/')).join('.')
+          entry.originalValue = get(
+            original.isNew ? {} : original._original,
+            path
+          )
+        })
+      }
+
+      // assemble patch data
+      const data = { ops, ref: this._originalId }
+      each(options.includes, (type, name) => {
+        data[name] = original[type.from || name]
       })
+
+      return original.patches.create(data).then(() => next(), next)
+    })
   })
 
   schema.pre('findOneAndUpdate', preUpdateOne)
